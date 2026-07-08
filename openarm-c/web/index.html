@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenArm-C</title>
+<style>
+  :root { --bg:#0e1116; --panel:#171c24; --line:#2a323d; --fg:#e6edf3; --mut:#8b98a5;
+          --ok:#2ea043; --warn:#d29922; --bad:#f85149; --sel:#1f6feb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.4 system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:16px; }
+  h1 { font-size:17px; margin:0; font-weight:650; }
+  .pill { font-size:12px; padding:3px 10px; border-radius:999px; border:1px solid var(--line); color:var(--mut); }
+  .pill.on { background:rgba(46,160,67,.15); color:var(--ok); border-color:var(--ok); }
+  .pill.off { background:rgba(248,81,73,.12); color:var(--bad); border-color:var(--bad); }
+  main { padding:20px; display:grid; gap:20px; max-width:1000px; margin:0 auto; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button { background:var(--panel); color:var(--fg); border:1px solid var(--line); border-radius:8px;
+           padding:8px 14px; font-size:13px; cursor:pointer; }
+  button:hover { border-color:var(--sel); }
+  button.danger { border-color:var(--bad); color:var(--bad); }
+  button.go { border-color:var(--ok); color:var(--ok); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut); margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; }
+  th,td { text-align:right; padding:6px 8px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; }
+  th:first-child,td:first-child { text-align:left; }
+  tr.sel td { background:rgba(31,111,235,.14); }
+  .bar { position:relative; height:8px; background:#0b0e13; border-radius:4px; overflow:hidden; min-width:120px; }
+  .bar > i { position:absolute; top:0; bottom:0; background:var(--sel); }
+  .jog button { padding:3px 9px; }
+  .status { color:var(--mut); }
+  .err { color:var(--bad); font-weight:600; }
+  input[type=range]{ width:160px; }
+  .muted{color:var(--mut)}
+  /* on-screen controller */
+  .gp .body { fill:#0b0e13; stroke:var(--line); stroke-width:2; }
+  .gp .btn  { fill:#232b36; stroke:var(--line); stroke-width:1.5; transition:fill .05s; }
+  .gp .lbl  { fill:var(--mut); font:600 10px system-ui; }
+  .gp .hl   { fill:var(--sel); stroke:#79b8ff; }
+  .gp.disconnected { opacity:.3; }
+  #stick { transition:transform .05s linear; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OpenArm-C</h1>
+  <span id="pad" class="pill">controller: —</span>
+  <span id="mode" class="pill">—</span>
+  <span id="stat" class="status"></span>
+  <span style="flex:1"></span>
+  <button id="connect" class="go" onclick="toggleConnect()">Connect motors</button>
+  <button id="calib" onclick="api('/api/calibrate')">Auto-Calibrate</button>
+  <button id="manual" onclick="toggleManual()">Manual Calibrate</button>
+  <button id="mark" onclick="api('/api/manual_mark')" style="display:none">Mark endpoint (A)</button>
+  <button id="estop" class="danger" onclick="toggleEstop()">E-STOP</button>
+  <button onclick="window.open('/api/log','_blank')">Log</button>
+</header>
+<main>
+  <div class="card">
+    <h2>Controller</h2>
+    <div class="row" style="align-items:center; gap:28px">
+      <svg id="gp" class="gp" viewBox="0 0 360 200" width="330" height="184">
+        <ellipse class="body" cx="95"  cy="140" rx="42" ry="50"/>
+        <ellipse class="body" cx="265" cy="140" rx="42" ry="50"/>
+        <rect class="body" x="55" y="58" width="250" height="84" rx="42"/>
+        <rect class="btn" x="80"  y="46" width="46" height="14" rx="7"/>
+        <rect class="btn" x="234" y="46" width="46" height="14" rx="7"/>
+        <!-- d-pad -->
+        <rect class="btn" x="96" y="96" width="16" height="16"/>
+        <rect id="dpad-up"    class="btn" x="96"  y="78"  width="16" height="20" rx="3"/>
+        <rect id="dpad-down"  class="btn" x="96"  y="110" width="16" height="20" rx="3"/>
+        <rect id="dpad-left"  class="btn" x="78"  y="96"  width="20" height="16" rx="3"/>
+        <rect id="dpad-right" class="btn" x="110" y="96"  width="20" height="16" rx="3"/>
+        <!-- left stick (moves with stick_x) -->
+        <circle class="body" cx="150" cy="122" r="25"/>
+        <g id="stick"><circle id="lstick" class="btn" cx="150" cy="122" r="15"/></g>
+        <!-- right stick -->
+        <circle class="body" cx="212" cy="122" r="25"/>
+        <circle id="rstick" class="btn" cx="212" cy="122" r="15"/>
+        <!-- face buttons -->
+        <circle class="btn" cx="285" cy="76"  r="10"/>
+        <circle class="btn" cx="266" cy="94"  r="10"/>
+        <circle class="btn" cx="304" cy="94"  r="10"/>
+        <circle id="btn-a" class="btn" cx="285" cy="112" r="10"/>
+        <text class="lbl" x="285" y="112" text-anchor="middle" dy="3.5">A</text>
+        <!-- select / start -->
+        <rect class="btn" x="152" y="88" width="22" height="9" rx="4"/>
+        <rect id="btn-start" class="btn" x="188" y="88" width="22" height="9" rx="4"/>
+        <text class="lbl" x="199" y="82" text-anchor="middle">START</text>
+      </svg>
+      <div class="muted" style="font-size:12px;line-height:1.9">
+        <div><b>D-pad ↑</b> J7→J1 &nbsp; <b>↓</b> J1→J7 — select joint</div>
+        <div><b>D-pad ↔</b> — switch arm / bus</div>
+        <div><b>Left stick ↔</b> — jog selected joint</div>
+        <div><b>START</b> — E-STOP</div>
+        <div class="muted" style="margin-top:6px">No controller? Use the sliders below.</div>
+        <div id="padhint" class="muted" style="margin-top:6px">plug in a controller to take over</div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Gains</h2>
+    <div class="row">
+      <span class="muted">scale</span>
+      <input type="range" min="0.5" max="2" step="0.05" value="1" id="gain" oninput="setGain(this.value)">
+      <span id="gainv">1.00×</span>
+      <span class="muted">— base/shoulder firmer as you raise this. Kd is capped at 2.5 (anti-vibration).</span>
+    </div>
+  </div>
+  <div id="manbanner" class="card" style="display:none; border-color:var(--warn); color:var(--warn)"></div>
+  <div id="buses"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const R2D = 180/Math.PI, D2R = Math.PI/180;   // sliders/readouts are in DEGREES
+function api(path){ return fetch(path, {method:'POST'}).catch(()=>{}); }
+function jog(b,m,d){ api(`/api/jog?bus=${b}&motor=${m}&delta=${d}`); }
+function select(b,m){ api(`/api/select?bus=${b}&motor=${m}`); }
+function setGain(v){ $('#gainv').textContent = (+v).toFixed(2)+'×'; api(`/api/gain?scale=${v}`); }
+let estopped=false, connected=false, manual=false;
+function toggleEstop(){ api(estopped?'/api/clear':'/api/estop'); }
+function toggleConnect(){ api(connected?'/api/disconnect':'/api/connect'); }
+function toggleManual(){ api(manual?'/api/manual_stop':'/api/manual_start'); }
+
+function pct(v,lo,hi){ if(hi<=lo) return 50; let p=(v-lo)/(hi-lo)*100; return Math.max(0,Math.min(100,p)); }
+
+async function tick(){
+  let s; try { s = await (await fetch('/api/status')).json(); } catch(e){ return; }
+  estopped = s.estopped; connected = s.connected; manual = s.manual_cal;
+  const pad = $('#pad');
+  pad.textContent = 'controller: ' + (s.pad_connected ? s.pad_name : 'none');
+  pad.className = 'pill ' + (s.pad_connected ? 'on':'off');
+  const mode = $('#mode');
+  mode.textContent = s.estopped ? 'E-STOPPED' : s.calibrating ? 'AUTO-CALIBRATING'
+                   : s.manual_cal ? 'MANUAL CALIBRATE' : (!s.connected?'NOT CONNECTED'
+                   : (s.pad_connected?'SCHEME 1 (gamepad)':'CONNECTED'));
+  mode.className = 'pill ' + (s.estopped||!s.connected?'off':'on');
+  $('#stat').textContent = s.status;
+  $('#estop').textContent = s.estopped ? 'Clear E-STOP' : 'E-STOP';
+  // connect button + gate calibration on being connected (E-STOP disables all)
+  const cb=$('#connect');
+  cb.textContent = s.connected ? 'Disconnect' : 'Connect motors';
+  cb.className = s.connected ? '' : 'go';
+  $('#calib').disabled  = !s.connected || s.calibrating || s.manual_cal || s.estopped;
+  const mb=$('#manual');
+  mb.textContent = s.manual_cal ? 'Exit Manual Cal' : 'Manual Calibrate';
+  mb.className = s.manual_cal ? 'go' : '';
+  mb.disabled = !s.connected || s.calibrating || s.estopped;
+  const mk=$('#mark');
+  mk.style.display = s.manual_cal ? '' : 'none';
+  mk.disabled = !s.connected || s.estopped;
+
+  // live controller highlight
+  const p = s.pad || {stick_x:0,dpad_x:0,dpad_y:0,a:0,start:0};
+  $('#gp').classList.toggle('disconnected', !s.pad_connected);
+  $('#padhint').textContent = s.pad_connected ? ('active — '+s.pad_name) : 'plug in a controller to take over';
+  const hl=(id,on)=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hl',!!on); };
+  hl('dpad-up', p.dpad_y<0);   hl('dpad-down', p.dpad_y>0);
+  hl('dpad-left', p.dpad_x<0);  hl('dpad-right', p.dpad_x>0);
+  hl('btn-a', p.a);  hl('btn-start', p.start);
+  const st=document.getElementById('stick');
+  if(st) st.setAttribute('transform', `translate(${(p.stick_x*11).toFixed(1)},0)`);
+
+  const banner=$('#manbanner');
+  if(s.manual_cal){
+    banner.style.display='';
+    banner.innerHTML='<b>Manual calibration</b> — pick a joint (D-pad or click its row), jog it with the '+
+      'left stick or its slider to one physical limit and press <b>A</b> (or <b>Mark endpoint</b>), '+
+      'then jog to the other limit and press <b>A</b> again. Repeat per joint. E-STOP exits.';
+  } else banner.style.display='none';
+
+  renderBuses(s);
+}
+
+// Build the joint table ONCE per layout, then update values in place, so a
+// slider keeps focus while you drag it (a full innerHTML rebuild would reset it).
+let layoutSig = '';
+function renderBuses(s){
+  const sig = s.buses.map(b=>b.iface+':'+b.motors.map(m=>m.id).join(',')).join('|');
+  if(sig !== layoutSig){ buildLayout(s); layoutSig = sig; }
+  s.buses.forEach((bus,bi)=>bus.motors.forEach(m=>updateJoint(bi,m,s)));
+}
+function buildLayout(s){
+  let html='';
+  s.buses.forEach((bus,bi)=>{
+    const side = bus.iface==='can1'?' — left arm':bus.iface==='can0'?' — right arm':'';
+    html += `<div class="card"><h2>${bus.iface}${side} · ${bus.nmotors} joint(s)</h2><table>`;
+    html += `<tr><th>Joint</th><th>angle</th><th>control &nbsp;(drag = move, °)</th><th>target</th><th>τ</th><th>kp/kd</th><th>status</th></tr>`;
+    bus.motors.forEach(m=>{
+      const k=`${bi}-${m.id}`;
+      html += `<tr id="row-${k}" onclick="select(${bi},${m.id})">`+
+        `<td>J${m.id}<span id="sel-${k}"></span> <span class="muted">${m.model}</span></td>`+
+        `<td id="pos-${k}"></td>`+
+        `<td style="min-width:200px"><input type="range" id="sl-${k}" step="0.5" style="width:100%"`+
+        ` oninput="onSlide(${bi},${m.id},this.value)" onclick="event.stopPropagation()"></td>`+
+        `<td id="tgt-${k}"></td><td id="tau-${k}"></td>`+
+        `<td class="muted">${m.kp.toFixed(0)}/${m.kd.toFixed(1)}</td>`+
+        `<td id="st-${k}"></td></tr>`;
+    });
+    html += `</table></div>`;
+  });
+  $('#buses').innerHTML = html || '<div class="card muted">No motors detected. Are the buses up and powered?</div>';
+}
+function updateJoint(bi,m,s){
+  const k=`${bi}-${m.id}`, g=p=>document.getElementById(p+'-'+k);
+  const sel=(bi===s.sel_bus && m.id===s.sel_motor), e=m.err>=8;
+  const row=g('row'); if(row) row.className=sel?'sel':'';
+  const selm=g('sel'); if(selm) selm.textContent=sel?' ◄':'';
+  const pos=g('pos'); if(pos) pos.textContent=(m.pos*R2D).toFixed(1)+'°';
+  const tgt=g('tgt'); if(tgt) tgt.textContent=(m.target*R2D).toFixed(1)+'°';
+  const tau=g('tau'); if(tau) tau.textContent=m.tau.toFixed(2);
+  const stt=g('st'); if(stt){
+    let txt = e?('ERR '+m.err):(m.active?'hold':'off');
+    if(s.manual_cal) txt = m.cal_step===2 ? ('✔ ['+(m.tmin*R2D).toFixed(0)+'…'+(m.tmax*R2D).toFixed(0)+'°]')
+                        : m.cal_step===1 ? '① end1 set — jog + Mark' : 'jog to a limit + Mark';
+    stt.textContent=txt; stt.className=e?'err':'';
+  }
+  const sl=g('sl');
+  if(sl){
+    // Degrees. While still defining this joint's limits, allow a wide free-jog
+    // range; once both endpoints are marked snap the slider to the new range.
+    if(s.manual_cal && m.cal_step<2){ sl.min="-180"; sl.max="180"; }
+    else { sl.min=(m.tmin*R2D).toFixed(0); sl.max=(m.tmax*R2D).toFixed(0); }
+    sl.disabled = !s.connected || s.estopped;   // E-STOP / not-connected disables
+    // reflect the ACTUAL encoder ANGLE: if the motor isn't physically moving
+    // (e.g. stalled/too weak), the slider doesn't move either. Skip while dragging.
+    if(document.activeElement!==sl) sl.value=(m.pos*R2D).toFixed(1);
+  }
+}
+function onSlide(bi,id,vdeg){ api(`/api/target?bus=${bi}&motor=${id}&pos=${(vdeg*D2R).toFixed(4)}`); }
+
+setInterval(tick, 100); tick();
+</script>
+</body>
+</html>

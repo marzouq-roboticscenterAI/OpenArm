@@ -1,2 +1,0 @@
-motorbridge>=0.4.7
-flask>=3.0
