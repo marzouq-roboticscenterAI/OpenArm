@@ -1,0 +1,31 @@
+# 99-roverservo-can.rules — stable names for the rig's USB-CAN adapters.
+#
+# WHY: can0/can1/... are assigned in USB enumeration order and are NOT stable.
+# These rules give each physical adapter a permanent, meaningful name (can_rover,
+# can_servo, ...) based on its hardware identity, so software can bind to the
+# right device regardless of plug order — and regardless of whether devices
+# share a bitrate. This is the scalable answer for 4+ CAN devices.
+#
+# HOW TO USE
+#   1. ./list_can_adapters.sh                    # get each adapter's serial/port
+#   2. Fill in the ATTRS{serial}=="..." (or KERNELS=="...") values below.
+#   3. sudo cp 99-roverservo-can.rules /etc/udev/rules.d/
+#      sudo udevadm control --reload && sudo udevadm trigger
+#   4. Re-plug or reboot; verify with:  ip -br link show type can
+#
+# The NAME you choose here must match what the software binds to:
+#   - Ranger Air rover : export RANGER_CAN=can_rover   (or --rover-can can_rover)
+#   - DS2-C servo      : export DS2C_CAN=can_servo     (or --servo-can can_servo)
+#   - extra devices    : whatever your driver for them uses
+
+SUBSYSTEM=="net", ACTION=="add", ATTRS{serial}=="REPLACE_ROVER_SERIAL", NAME="can_rover"
+SUBSYSTEM=="net", ACTION=="add", ATTRS{serial}=="REPLACE_SERVO_SERIAL", NAME="can_servo"
+SUBSYSTEM=="net", ACTION=="add", ATTRS{serial}=="REPLACE_DEV3_SERIAL",  NAME="can_dev3"
+SUBSYSTEM=="net", ACTION=="add", ATTRS{serial}=="REPLACE_DEV4_SERIAL",  NAME="can_dev4"
+
+# If two adapters report the SAME serial (common on cheap gs_usb clones), match
+# the physical USB port instead — stable as long as each adapter stays in its
+# socket. Copy the KERNELS token from list_can_adapters.sh, e.g.:
+#
+#   SUBSYSTEM=="net", ACTION=="add", KERNELS=="1-1.2:1.0", NAME="can_rover"
+#   SUBSYSTEM=="net", ACTION=="add", KERNELS=="1-1.3:1.0", NAME="can_servo"

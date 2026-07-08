@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
+
+# Local machine-specific CAN naming (copy from the template, don't commit secrets)
+# 99-roverservo-can.rules is committed as a TEMPLATE; keep filled-in copies local:
+99-roverservo-can.local.rules

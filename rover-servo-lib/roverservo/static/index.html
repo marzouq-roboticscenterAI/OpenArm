@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Rover + Servo control</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Rover&nbsp;+&nbsp;Servo&nbsp;control</h1>
+      <div class="sub" id="link-sub">connecting…</div>
+    </div>
+    <div class="spacer"></div>
+    <button class="estop" id="estop-all" title="Stop everything (Space)">■ E-STOP ALL</button>
+  </header>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="grid">
+    <!-- ================= ROVER ================= -->
+    <section class="panel" id="rover-panel">
+      <h2><span class="dot" id="rover-dot"></span> Ranger&nbsp;Air&nbsp;rover
+        <span class="iface" id="rover-iface"></span></h2>
+
+      <div class="telemetry">
+        <div><div class="k">Battery</div><div class="v big" id="rover-batt">—</div></div>
+        <div><div class="k">Control mode</div><div class="v" id="rover-ctrl">—</div></div>
+        <div><div class="k">Motion mode</div><div class="v" id="rover-mode">—</div></div>
+        <div><div class="k">Body speed</div><div class="v" id="rover-speed">—</div></div>
+      </div>
+      <div class="faults" id="rover-faults"></div>
+
+      <div class="row">
+        <button class="btn primary" id="rover-enable">Enable</button>
+        <button class="btn" id="rover-disable">Disable</button>
+        <button class="btn" id="rover-clear">Clear errors</button>
+        <button class="btn" id="rover-light">Lights</button>
+      </div>
+
+      <div class="row">
+        <span class="lbl">Mode</span>
+        <div class="seg" id="rover-modeseg">
+          <button data-mode="ackermann" class="active">Ackermann</button>
+          <button data-mode="tilt">Tilt</button>
+          <button data-mode="spin">Spin</button>
+          <button data-mode="park">Park</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <span class="lbl">Speed</span>
+        <input type="range" id="rover-linspeed" min="0.05" max="1.5" step="0.05" value="0.3" />
+        <span class="val" id="rover-linspeed-val">0.30 m/s</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Turn</span>
+        <input type="range" id="rover-turn" min="0.05" max="1.5" step="0.05" value="0.4" />
+        <span class="val" id="rover-turn-val">0.40</span>
+      </div>
+
+      <div class="pad" id="rover-pad">
+        <div class="c empty"></div>
+        <button data-drive="fwd">▲</button>
+        <div class="c empty"></div>
+        <button data-drive="left">◀</button>
+        <button data-drive="stop" style="font-size:14px">STOP</button>
+        <button data-drive="right">▶</button>
+        <div class="c empty"></div>
+        <button data-drive="back">▼</button>
+        <div class="c empty"></div>
+      </div>
+      <div class="hint">Hold a pad button or <b>W A S D</b> / arrow keys to drive — release to stop (deadman).</div>
+    </section>
+
+    <!-- ================= SERVO ================= -->
+    <section class="panel" id="servo-panel">
+      <h2><span class="dot" id="servo-dot"></span> DS2-C&nbsp;servo&nbsp;lift
+        <span class="iface" id="servo-iface"></span></h2>
+
+      <div class="telemetry">
+        <div><div class="k">Position</div><div class="v big" id="servo-pos">—</div></div>
+        <div><div class="k">Velocity</div><div class="v" id="servo-vel">—</div></div>
+        <div><div class="k">Drive state</div><div class="v" id="servo-state">—</div></div>
+        <div><div class="k">Activity</div><div class="v" id="servo-status">—</div></div>
+      </div>
+      <div class="faults" id="servo-faults"></div>
+
+      <div class="row">
+        <button class="btn primary" id="servo-enable">Enable</button>
+        <button class="btn" id="servo-disable">Disable</button>
+        <button class="btn" id="servo-reset">Fault reset</button>
+        <button class="btn danger" id="servo-estop">Servo E-stop</button>
+      </div>
+
+      <div class="row">
+        <span class="lbl">Step</span>
+        <input type="range" id="servo-step" min="2000" max="50000" step="1000" value="20000" />
+        <span class="val" id="servo-step-val">2.0 rev</span>
+      </div>
+      <div class="row">
+        <span class="lbl">Speed</span>
+        <input type="range" id="servo-speed" min="1000" max="100000" step="1000" value="10000" />
+        <span class="val" id="servo-speed-val">60 rpm</span>
+      </div>
+
+      <div class="row" style="justify-content:center; gap:16px; margin-top:10px">
+        <button class="btn" id="servo-raise" style="min-width:110px">▲ Raise step</button>
+        <button class="btn" id="servo-lower" style="min-width:110px">▼ Lower step</button>
+      </div>
+      <div class="row" style="justify-content:center; gap:16px">
+        <button class="btn" id="servo-jog-up" style="min-width:110px">▲ Jog up (hold)</button>
+        <button class="btn" id="servo-jog-down" style="min-width:110px">▼ Jog down (hold)</button>
+      </div>
+      <div class="hint">Positive/down is the drive's native direction; Raise/Jog-up send it the other way.
+        Hold a jog button to move; release to stop.</div>
+    </section>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

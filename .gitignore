@@ -22,6 +22,3 @@ venv/
 .venv/
 __pycache__/
 *.py[cod]
-
-# external lib (reference)
-rover-servo-lib/
