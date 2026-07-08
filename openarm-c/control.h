@@ -41,9 +41,18 @@ typedef struct {
     char     pad_name[128];
     /* live controller input (for the on-screen gamepad highlight) */
     float    pad_stick_x;              /* -1..+1                  */
+    float    pad_rstick_x, pad_rstick_y;
     int      pad_dpad_x, pad_dpad_y;   /* -1/0/+1                 */
     int      pad_btn_a, pad_btn_start;
+    int      pad_btn_l1, pad_btn_r1;
+    float    pad_l2, pad_r2;
     int      sel_bus, sel_motor;       /* scheme-1 selection      */
+
+    /* Ranger Air rover chassis (can2) */
+    int      ranger_present, ranger_enabled, ranger_estop;
+    float    ranger_lin, ranger_ang, ranger_voltage;
+    /* DS2-C lift servo (can3) */
+    int      ds2c_present, ds2c_enabled, ds2c_vel;
     int      connected;                /* operator pressed Connect */
     int      estopped;
     int      calibrating;              /* auto-calibration running  */

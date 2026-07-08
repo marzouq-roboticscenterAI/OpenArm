@@ -5,6 +5,8 @@
 #include "socketcan.h"
 #include "gamepad.h"
 #include "calib.h"
+#include "ranger.h"
+#include "ds2c.h"
 #include "log.h"
 
 #include <stdio.h>
@@ -21,6 +23,12 @@
 #define RETURN_SECS   2.5      /* gentle return-to-start duration after calibration */
 #define KD_CAP        2.5f     /* matches OpenArm: Kd>=~3.5 limit-cycles */
 #define CALIB_FILE    "arm_calib.txt"
+
+/* auxiliary CAN devices (separate from the two arm buses) */
+#define RANGER_IFACE_DEFAULT "can2"
+#define DS2C_IFACE_DEFAULT   "can3"
+#define DS2C_NODE_DEFAULT    1
+#define DS2C_STICK_MAX_PPS   12000   /* right-stick full deflection velocity */
 
 /* ---- per-joint gains by model tier (id map == calibration) ---- */
 static void joint_gains(int id, float scale, float *kp, float *kd)
@@ -40,6 +48,8 @@ static const char *model_for(int id)
 /* ---- shared state ---- */
 static oa_state_t     S;
 static int            g_fd[OA_NBUS];
+static ranger_t       g_ranger;      /* Ranger Air rover on can2 */
+static ds2c_t         g_ds2c;        /* DS2-C lift servo on can3 */
 static pthread_t      g_thread;
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static volatile int   g_stop = 0;
@@ -154,7 +164,18 @@ int control_init(const char *ifaces[], int n)
              * set from the recorded initial angle instead (see run_calibration). */
             m->target = m->goal = m->pos;
         }
-    snprintf(S.status, sizeof S.status, "initialized %d bus(es)", n);
+    /* ---- auxiliary devices on their own buses (rover + lift servo) ---- */
+    const char *renv = getenv("RANGER_CAN"); const char *rif = (renv && *renv) ? renv : RANGER_IFACE_DEFAULT;
+    const char *denv = getenv("DS2C_CAN");   const char *dif = (denv && *denv) ? denv : DS2C_IFACE_DEFAULT;
+    ranger_init(&g_ranger);
+    ds2c_init(&g_ds2c);
+    S.ranger_present = ranger_open(&g_ranger, rif);
+    S.ds2c_present   = ds2c_open(&g_ds2c, dif, DS2C_NODE_DEFAULT);
+    if (!S.ranger_present) oa_log("ranger: cannot open %s (rover control disabled)", rif);
+    if (!S.ds2c_present)   oa_log("ds2c: cannot open %s (lift control disabled)", dif);
+
+    snprintf(S.status, sizeof S.status, "initialized %d arm bus(es)%s%s", n,
+             S.ranger_present ? " +rover" : "", S.ds2c_present ? " +lift" : "");
     return n;
 }
 
@@ -534,19 +555,36 @@ static void *control_loop(void *arg)
 
         if (do_connect && !S.connected && !S.estopped) {
             enable_all(); hold_current();
+            /* enable the (slow, blocking) lift sequence FIRST, then arm the rover
+             * last so its first 0x111 heartbeat streams from ranger_tick this same
+             * loop iteration -- inside the chassis' 500 ms command timeout. */
+            if (S.ds2c_present)   ds2c_enable(&g_ds2c);
+            if (S.ranger_present) ranger_enable(&g_ranger);
             pthread_mutex_lock(&g_lock); S.connected = 1; pthread_mutex_unlock(&g_lock);
-            oa_log("CONNECT: motors enabled + holding");
+            oa_log("CONNECT: motors enabled + holding; rover/lift armed");
         }
         if (do_disconnect && S.connected) {
             disable_all();
+            if (S.ranger_present) ranger_disable(&g_ranger);
+            if (S.ds2c_present)   ds2c_disable(&g_ds2c);
             pthread_mutex_lock(&g_lock); S.connected = 0; pthread_mutex_unlock(&g_lock);
-            oa_log("DISCONNECT: motors limp");
+            oa_log("DISCONNECT: motors limp; rover standby; lift disabled");
         }
-        if (do_estop)  { disable_all(); pthread_mutex_lock(&g_lock); S.estopped = 1; S.manual_cal = 0; snprintf(S.status,sizeof S.status,"E-STOP"); pthread_mutex_unlock(&g_lock); oa_log("E-STOP: all motors disabled"); }
+        if (do_estop)  {
+            disable_all();
+            if (S.ranger_present) ranger_disable(&g_ranger);   /* rover -> standby */
+            if (S.ds2c_present)   ds2c_estop(&g_ds2c);         /* lift -> quick-stop + off */
+            pthread_mutex_lock(&g_lock); S.estopped = 1; S.manual_cal = 0; snprintf(S.status,sizeof S.status,"E-STOP"); pthread_mutex_unlock(&g_lock);
+            oa_log("E-STOP: all motors disabled; rover standby; lift quick-stop");
+        }
         if (do_clear)  {
             int was; pthread_mutex_lock(&g_lock); S.estopped = 0; was = S.connected; pthread_mutex_unlock(&g_lock);
             oa_log("CLEAR E-STOP (was connected=%d)", was);
-            if (was) { enable_all(); hold_current(); }   /* re-hold at actual pose (no snap) */
+            if (was) {
+                enable_all(); hold_current();   /* re-hold at actual pose (no snap) */
+                if (S.ds2c_present)   ds2c_enable(&g_ds2c);   /* slow first ... */
+                if (S.ranger_present) { ranger_clear_errors(&g_ranger); ranger_enable(&g_ranger); }  /* ... rover last */
+            }
         }
         if (do_calib && S.connected && !S.estopped) { oa_log("AUTO-CALIBRATE: start"); run_calibration(); oa_log("AUTO-CALIBRATE: done"); }
         if (do_mstart && S.connected && !S.estopped) {
@@ -600,6 +638,35 @@ static void *control_loop(void *arg)
                 }
             }
         }
+
+        /* ---- rover (Ranger Air, can2) + lift servo (DS2-C, can3) mapping ----
+         * L2/R2 = reverse/forward (Ackermann linear); L1 = spin left, R1 = spin
+         * right (SPIN mode angular, CCW positive). Right thumbstick = lift servo
+         * velocity (stick up = raise). Only while connected + not e-stopped and a
+         * controller is present; otherwise everything is commanded to stop. */
+        {
+            int rover_go = pad_on && S.connected && !S.estopped;
+            if (S.ranger_present) {
+                if (rover_go) {
+                    int spin = pad.btn_l1 || pad.btn_r1;
+                    if (spin) {
+                        float ang = ((pad.btn_l1 ? 1.0f : 0.0f) - (pad.btn_r1 ? 1.0f : 0.0f)) * 1.2f;
+                        ranger_drive(&g_ranger, RANGER_MODE_SPIN, 0.0f, ang);
+                    } else {
+                        float lin = (pad.r2 - pad.l2) * 1.0f;   /* R2 fwd, L2 back (m/s) */
+                        ranger_drive(&g_ranger, RANGER_MODE_ACKERMANN, lin, 0.0f);
+                    }
+                } else {
+                    ranger_drive(&g_ranger, g_ranger.cur_mode, 0.0f, 0.0f);
+                }
+            }
+            if (S.ds2c_present) {
+                int vel = rover_go ? (int)(pad.rstick_y * DS2C_STICK_MAX_PPS) : 0;
+                ds2c_set_velocity(&g_ds2c, vel);
+            }
+        }
+        if (S.ranger_present) ranger_tick(&g_ranger);
+        if (S.ds2c_present)   ds2c_tick(&g_ds2c);
 
         /* apply explicit selection / jog commands (from web UI) */
         if (sel_b >= 0 && sel_b < S.nbus) { sbus = sel_b; if (sel_m >= OA_MIN_MOTOR) smot = sel_m; }
@@ -686,13 +753,23 @@ static void *control_loop(void *arg)
         if (pad_on) {
             snprintf(S.pad_name, sizeof S.pad_name, "%s", pad.name);
             S.pad_stick_x = pad.stick_x;
+            S.pad_rstick_x = pad.rstick_x; S.pad_rstick_y = pad.rstick_y;
             S.pad_dpad_x = pad.dpad_x; S.pad_dpad_y = pad.dpad_y;
             S.pad_btn_a = pad.btn_a;   S.pad_btn_start = pad.btn_start;
+            S.pad_btn_l1 = pad.btn_l1; S.pad_btn_r1 = pad.btn_r1;
+            S.pad_l2 = pad.l2; S.pad_r2 = pad.r2;
         } else {
             S.pad_name[0] = 0;
-            S.pad_stick_x = 0; S.pad_dpad_x = S.pad_dpad_y = 0;
+            S.pad_stick_x = 0; S.pad_rstick_x = S.pad_rstick_y = 0;
+            S.pad_dpad_x = S.pad_dpad_y = 0;
             S.pad_btn_a = S.pad_btn_start = 0;
+            S.pad_btn_l1 = S.pad_btn_r1 = 0; S.pad_l2 = S.pad_r2 = 0;
         }
+        /* rover + lift live status */
+        S.ranger_enabled = g_ranger.enabled; S.ranger_estop = g_ranger.estop;
+        S.ranger_lin = g_ranger.lin; S.ranger_ang = g_ranger.ang;
+        S.ranger_voltage = g_ranger.voltage;
+        S.ds2c_enabled = g_ds2c.enabled; S.ds2c_vel = g_ds2c.cur_vel;
         if (!S.calibrating && !S.estopped && !S.manual_cal)
             snprintf(S.status, sizeof S.status, "%s",
                      !S.connected ? "not connected — press Connect to enable motors"
@@ -708,6 +785,8 @@ static void *control_loop(void *arg)
     }
     gamepad_close(&pad);
     disable_all();
+    if (S.ranger_present) ranger_close(&g_ranger);
+    if (S.ds2c_present)   ds2c_close(&g_ds2c);
     return NULL;
 }
 

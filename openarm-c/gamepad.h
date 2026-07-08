@@ -13,10 +13,13 @@ typedef struct {
 
     /* normalized, deadzoned inputs (updated by gamepad_poll) */
     float stick_x;          /* left stick X, -1..+1 */
+    float rstick_x, rstick_y; /* right stick, -1..+1 (deadzoned) */
     int   dpad_x, dpad_y;   /* -1/0/+1 */
     int   btn_a;            /* south button (A) */
     int   btn_start;        /* start button (e-stop) */
     int   btn_l3, btn_r3;   /* left / right stick click (thumb) */
+    int   btn_l1, btn_r1;   /* left / right bumper */
+    float l2, r2;           /* left / right trigger, 0..1 */
 
     /* edge helpers: set for one poll when the button transitions 0->1 */
     int   dpad_up_edge, dpad_down_edge, dpad_left_edge, dpad_right_edge;
@@ -26,6 +29,8 @@ typedef struct {
     int   _hat_x, _hat_y;
     int   _prev_dx, _prev_dy, _prev_a, _prev_l3, _prev_r3;
     int   _ax_min, _ax_max;   /* left-stick X calibration */
+    int   _rx_min, _rx_max, _ry_min, _ry_max;   /* right-stick calibration */
+    int   _z_min, _z_max, _rz_min, _rz_max;     /* trigger calibration */
     float _dz;                /* deadzone fraction */
 } gamepad_t;
 

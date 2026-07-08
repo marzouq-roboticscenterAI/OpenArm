@@ -65,8 +65,15 @@
         <ellipse class="body" cx="95"  cy="140" rx="42" ry="50"/>
         <ellipse class="body" cx="265" cy="140" rx="42" ry="50"/>
         <rect class="body" x="55" y="58" width="250" height="84" rx="42"/>
-        <rect class="btn" x="80"  y="46" width="46" height="14" rx="7"/>
-        <rect class="btn" x="234" y="46" width="46" height="14" rx="7"/>
+        <!-- triggers (L2/R2) + bumpers (L1/R1) -->
+        <rect id="btn-l2" class="btn" x="80"  y="30" width="46" height="12" rx="6"/>
+        <rect id="btn-r2" class="btn" x="234" y="30" width="46" height="12" rx="6"/>
+        <text class="lbl" x="103" y="39" text-anchor="middle">L2</text>
+        <text class="lbl" x="257" y="39" text-anchor="middle">R2</text>
+        <rect id="btn-l1" class="btn" x="80"  y="46" width="46" height="14" rx="7"/>
+        <rect id="btn-r1" class="btn" x="234" y="46" width="46" height="14" rx="7"/>
+        <text class="lbl" x="103" y="56" text-anchor="middle">L1</text>
+        <text class="lbl" x="257" y="56" text-anchor="middle">R1</text>
         <!-- d-pad -->
         <rect class="btn" x="96" y="96" width="16" height="16"/>
         <rect id="dpad-up"    class="btn" x="96"  y="78"  width="16" height="20" rx="3"/>
@@ -76,9 +83,9 @@
         <!-- left stick (moves with stick_x) -->
         <circle class="body" cx="150" cy="122" r="25"/>
         <g id="stick"><circle id="lstick" class="btn" cx="150" cy="122" r="15"/></g>
-        <!-- right stick -->
+        <!-- right stick (moves with rstick, drives the lift servo) -->
         <circle class="body" cx="212" cy="122" r="25"/>
-        <circle id="rstick" class="btn" cx="212" cy="122" r="15"/>
+        <g id="rstickg"><circle id="rstick" class="btn" cx="212" cy="122" r="15"/></g>
         <!-- face buttons -->
         <circle class="btn" cx="285" cy="76"  r="10"/>
         <circle class="btn" cx="266" cy="94"  r="10"/>
@@ -94,6 +101,9 @@
         <div><b>D-pad ↑</b> J7→J1 &nbsp; <b>↓</b> J1→J7 — select joint</div>
         <div><b>D-pad ↔</b> — switch arm / bus</div>
         <div><b>Left stick ↔</b> — jog selected joint</div>
+        <div><b>R2 / L2</b> — rover forward / back</div>
+        <div><b>L1 / R1</b> — rover spin left / right</div>
+        <div><b>Right stick ↕</b> — lift servo up / down</div>
         <div><b>START</b> — E-STOP</div>
         <div class="muted" style="margin-top:6px">No controller? Use the sliders below.</div>
         <div id="padhint" class="muted" style="margin-top:6px">plug in a controller to take over</div>
@@ -107,6 +117,25 @@
       <input type="range" min="0.5" max="2" step="0.05" value="1" id="gain" oninput="setGain(this.value)">
       <span id="gainv">1.00×</span>
       <span class="muted">— base/shoulder firmer as you raise this. Kd is capped at 2.5 (anti-vibration).</span>
+    </div>
+  </div>
+  <div id="rovercard" class="card" style="display:none">
+    <h2>Rover &amp; Lift</h2>
+    <div class="row" style="gap:28px; flex-wrap:wrap">
+      <div id="rover-box">
+        <div><b>Ranger Air</b> <span id="rover-pill" class="pill off">—</span></div>
+        <div class="muted" style="font-size:12px;line-height:1.8;margin-top:4px">
+          <div>drive: <span id="rover-drive">idle</span></div>
+          <div>battery: <span id="rover-volt">—</span></div>
+        </div>
+      </div>
+      <div id="lift-box">
+        <div><b>DS2-C Lift</b> <span id="lift-pill" class="pill off">—</span></div>
+        <div class="muted" style="font-size:12px;line-height:1.8;margin-top:4px">
+          <div>velocity: <span id="lift-vel">0</span> pps</div>
+          <div class="muted">right stick ↑ = up, ↓ = down</div>
+        </div>
+      </div>
     </div>
   </div>
   <div id="manbanner" class="card" style="display:none; border-color:var(--warn); color:var(--warn)"></div>
@@ -153,15 +182,38 @@ async function tick(){
   mk.disabled = !s.connected || s.estopped;
 
   // live controller highlight
-  const p = s.pad || {stick_x:0,dpad_x:0,dpad_y:0,a:0,start:0};
+  const p = s.pad || {stick_x:0,rstick_x:0,rstick_y:0,dpad_x:0,dpad_y:0,a:0,start:0,l1:0,r1:0,l2:0,r2:0};
   $('#gp').classList.toggle('disconnected', !s.pad_connected);
   $('#padhint').textContent = s.pad_connected ? ('active — '+s.pad_name) : 'plug in a controller to take over';
   const hl=(id,on)=>{ const el=document.getElementById(id); if(el) el.classList.toggle('hl',!!on); };
   hl('dpad-up', p.dpad_y<0);   hl('dpad-down', p.dpad_y>0);
   hl('dpad-left', p.dpad_x<0);  hl('dpad-right', p.dpad_x>0);
   hl('btn-a', p.a);  hl('btn-start', p.start);
+  hl('btn-l1', p.l1);  hl('btn-r1', p.r1);
+  hl('btn-l2', p.l2>0.05);  hl('btn-r2', p.r2>0.05);
   const st=document.getElementById('stick');
   if(st) st.setAttribute('transform', `translate(${(p.stick_x*11).toFixed(1)},0)`);
+  const rst=document.getElementById('rstickg');
+  if(rst) rst.setAttribute('transform', `translate(${(p.rstick_x*11).toFixed(1)},${(p.rstick_y*11).toFixed(1)})`);
+
+  // rover + lift status card
+  const rc=$('#rovercard');
+  if(s.rover?.present || s.lift?.present){
+    rc.style.display='';
+    const rv=s.rover||{}, lf=s.lift||{};
+    const rpill=$('#rover-pill');
+    rpill.textContent = rv.estop ? 'CHASSIS E-STOP' : (rv.enabled ? 'armed' : 'standby');
+    rpill.className = 'pill ' + (rv.estop ? 'off' : (rv.enabled ? 'on' : 'off'));
+    let drive='idle';
+    if(Math.abs(rv.ang)>0.001) drive = (rv.ang>0?'spin left ':'spin right ')+Math.abs(rv.ang).toFixed(2)+' rad/s';
+    else if(Math.abs(rv.lin)>0.001) drive = (rv.lin>0?'forward ':'reverse ')+Math.abs(rv.lin).toFixed(2)+' m/s';
+    $('#rover-drive').textContent = drive;
+    $('#rover-volt').textContent = rv.voltage>0 ? rv.voltage.toFixed(1)+' V' : '—';
+    const lpill=$('#lift-pill');
+    lpill.textContent = lf.enabled ? 'enabled' : 'disabled';
+    lpill.className = 'pill ' + (lf.enabled ? 'on' : 'off');
+    $('#lift-vel').textContent = lf.vel|0;
+  } else rc.style.display='none';
 
   const banner=$('#manbanner');
   if(s.manual_cal){

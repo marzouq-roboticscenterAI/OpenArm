@@ -71,11 +71,17 @@ static void build_status(char *out, size_t cap)
     int n = snprintf(out, cap,
         "{\"pad_connected\":%d,\"pad_name\":\"%s\",\"sel_bus\":%d,\"sel_motor\":%d,"
         "\"connected\":%d,\"estopped\":%d,\"calibrating\":%d,\"manual_cal\":%d,\"gain_scale\":%.2f,\"status\":\"%s\","
-        "\"pad\":{\"stick_x\":%.3f,\"dpad_x\":%d,\"dpad_y\":%d,\"a\":%d,\"start\":%d},"
+        "\"pad\":{\"stick_x\":%.3f,\"rstick_x\":%.3f,\"rstick_y\":%.3f,\"dpad_x\":%d,\"dpad_y\":%d,"
+        "\"a\":%d,\"start\":%d,\"l1\":%d,\"r1\":%d,\"l2\":%.3f,\"r2\":%.3f},"
+        "\"rover\":{\"present\":%d,\"enabled\":%d,\"estop\":%d,\"lin\":%.3f,\"ang\":%.3f,\"voltage\":%.1f},"
+        "\"lift\":{\"present\":%d,\"enabled\":%d,\"vel\":%d},"
         "\"buses\":[",
         s.pad_connected, s.pad_name, s.sel_bus, s.sel_motor,
         s.connected, s.estopped, s.calibrating, s.manual_cal, s.gain_scale, s.status,
-        s.pad_stick_x, s.pad_dpad_x, s.pad_dpad_y, s.pad_btn_a, s.pad_btn_start);
+        s.pad_stick_x, s.pad_rstick_x, s.pad_rstick_y, s.pad_dpad_x, s.pad_dpad_y,
+        s.pad_btn_a, s.pad_btn_start, s.pad_btn_l1, s.pad_btn_r1, s.pad_l2, s.pad_r2,
+        s.ranger_present, s.ranger_enabled, s.ranger_estop, s.ranger_lin, s.ranger_ang, s.ranger_voltage,
+        s.ds2c_present, s.ds2c_enabled, s.ds2c_vel);
     for (int b = 0; b < s.nbus; b++) {
         n += snprintf(out + n, cap - n, "%s{\"iface\":\"%s\",\"nmotors\":%d,\"motors\":[",
                       b ? "," : "", s.bus[b].iface, s.bus[b].nmotors);

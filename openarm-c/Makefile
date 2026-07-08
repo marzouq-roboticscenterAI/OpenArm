@@ -3,7 +3,7 @@ CC      ?= cc
 CFLAGS  ?= -std=c11 -O2 -Wall -Wextra -Wpedantic
 LDFLAGS ?= -lpthread -lm
 
-OBJ = damiao.o socketcan.o gamepad.o calib.o control.o httpd.o log.o main.o
+OBJ = damiao.o socketcan.o gamepad.o calib.o ranger.o ds2c.o control.o httpd.o log.o main.o
 BIN = openarm
 
 all: $(BIN)

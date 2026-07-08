@@ -1,0 +1,33 @@
+# 99-openarm-can.rules — stable can0..can3 names for the OpenArm-C rig.
+#
+# WHY: canN names are handed out in USB-enumeration order and reshuffle on every
+# replug/reboot (that's why "can0 was up, can3 down" changed between runs). These
+# rules pin each PHYSICAL adapter to a fixed role name:
+#
+#   can0, can1 = arms          (1 Mbit/s)
+#   can2       = Ranger rover   (500 kbit/s)
+#   can3       = DS-2C servo    (1 Mbit/s)
+#
+# — which matches the OpenArm-C defaults (RANGER_CAN=can2, DS2C_CAN=can3, arms
+# auto-detected as the remaining can*), so `./run.sh` then "just works".
+#
+# INSTALL:
+#   sudo cp openarm-c/99-openarm-can.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload && sudo udevadm trigger
+#   # then re-plug the adapters or reboot, and verify:
+#   ip -br link show type can
+#
+# Identities captured 2026-07-08 via rover-servo-lib/list_can_adapters.sh:
+#   candleLight  1d50:606f  serial 004100354759530820353131   -> Ranger -> can2
+#   XCAN-USB     0c72:000c  USB port 3-2.2.3                   -> DS-2C  -> can3
+#   PCAN-USB FD  0c72:0012  USB port 3-2.2.4.3                 -> arm    -> can0
+#   PCAN-USB FD  0c72:0012  USB port 3-2.2.4.4                 -> arm    -> can1
+
+# Ranger rover — matched by its unique serial (survives moving to another port).
+SUBSYSTEM=="net", ACTION=="add", ATTRS{serial}=="004100354759530820353131", NAME="can2"
+
+# The PEAK/XCAN adapters all report a bogus shared serial, so match by the
+# physical USB port instead (stable as long as each stays in its socket).
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="3-2.2.3:1.0",   NAME="can3"   # DS-2C servo (XCAN-USB)
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="3-2.2.4.3:1.0", NAME="can0"   # arm  (swap with can1 line
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="3-2.2.4.4:1.0", NAME="can1"   #  if left/right is reversed)
