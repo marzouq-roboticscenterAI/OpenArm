@@ -19,6 +19,20 @@ A controller also drives the **rover** and **lift servo** when present:
 - **L1 / R1** — rover spin left / right (SPIN mode)
 - **Right thumbstick ↕** — DS2‑C lift servo up / down
 
+## A controller is optional
+The gamepad is **not required** and is not baked into the control code — it's one
+optional input alongside a full web/HTTP path. The **arm** can be driven entirely
+without a controller: dashboard sliders, the HTTP API, or the headless
+`./openarm --move …` command. The gamepad and the web layer are independent peers
+that feed the same thread-safe command API in the engine.
+
+**Caveat:** the **rover** and **lift servo** are currently wired *only* to the
+gamepad — there are no HTTP endpoints to drive them yet, so they need a physical
+controller. The underlying drivers are decoupled, so exposing them to the web is a
+small addition. See
+[openarm-c/README.md → *Controlling without a controller*](openarm-c/README.md#controlling-without-a-controller-input-architecture)
+for the full architecture and how to add rover/lift web control.
+
 Calibrate from the dashboard: **Auto‑Calibrate** (sweeps to hardstops) or
 **Manual Calibrate** (jog each joint to its limits and press A / Mark). One
 **E‑STOP** cuts everything. Actions and motor angles are logged to

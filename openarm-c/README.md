@@ -60,6 +60,48 @@ range is saved to `arm_calib.txt` and used to bound jogging.
 - `POST /api/select?bus=&motor=`
 - `POST /api/gain?scale=` — scale all kp (Kd stays capped at 2.5, anti-vibration)
 
+## Controlling without a controller (input architecture)
+**A gamepad is optional.** The engine ([`control.h`](control.h)) exposes a
+thread-safe *command API* that has no knowledge of any input device:
+`control_connect` · `control_disconnect` · `control_jog` · `control_set_target`
+(absolute) · `control_select` · `control_estop` · `control_clear_estop` ·
+`control_request_calibration` · `control_manual_*` · `control_set_gain_scale`.
+
+Two **independent, peer** inputs feed that API — neither depends on the other:
+1. **Gamepad** — read inside the control loop, but every gamepad action is gated
+   behind `pad_on` (`if (pad_on && S.connected …)` in [`control.c`](control.c)).
+   With no pad plugged in, `pad_on == 0` and the block is skipped; the arm runs
+   exactly the same.
+2. **Web / HTTP** — [`httpd.c`](httpd.c) maps routes straight onto the same
+   command API with zero gamepad involvement. This is the path a website, a
+   script, or `curl` uses.
+
+So the **arm is fully drivable with no controller**: use the dashboard sliders,
+hit the HTTP API directly, or run the headless one-shot `--move` (below). The
+gamepad is a convenience input, not a dependency, and [`gamepad.c`](gamepad.c) is
+a standalone module you can ignore or remove without touching arm control.
+
+Headless / programmatic options:
+- `./openarm --move IFACE ID TARGET [KP KD]` — move one joint and exit (no UI).
+- `./openarm --scan` — list present motors; `--calibrate` — calibrate and exit.
+- Any HTTP client against the API above (e.g. `curl -X POST
+  'localhost:8080/api/target?bus=0&motor=3&pos=0.5'`).
+
+### ⚠️ Rover and lift are currently gamepad-only
+Unlike the arm, the **Ranger Air rover (can2)** and **DS2-C lift servo (can3)**
+are wired *only* to the gamepad in the control loop (`rover_go = pad_on && …` in
+[`control.c`](control.c)). There are **no HTTP command endpoints** to drive them —
+[`httpd.c`](httpd.c) only *reports* their status in `/api/status`. Without a
+physical controller they are commanded to stop and cannot be moved from a website.
+
+This is a wiring gap, not a design limit: the underlying drivers are already
+decoupled the same way the arm is — [`ranger.h`](ranger.h) exposes
+`ranger_drive(r, mode, lin, ang)` and [`ds2c.h`](ds2c.h) exposes
+`ds2c_set_velocity(d, pps)`. To make them web-drivable, add thread-safe command
+setters in `control.c` (mirroring `control_jog` / `control_set_target`, applied
+by the loop when `!pad_on`) and matching endpoints in `httpd.c` (e.g.
+`/api/rover?lin=&ang=`, `/api/lift?vel=`).
+
 ## Design notes
 - Motors are forced into **MIT mode** (`CTRL_MODE=1`) on enable — they can power
   up in PosVel mode and silently ignore MIT frames otherwise.
