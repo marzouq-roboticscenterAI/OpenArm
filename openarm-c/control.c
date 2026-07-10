@@ -681,7 +681,7 @@ static void *control_loop(void *arg)
                 if (rover_go && fabsf(pad.rstick_y) > 0.0f)
                     vel = (int)(pad.rstick_y * DS2C_STICK_MAX_PPS);
                 else if (can_drive && (now_s() - w_lts) < WEB_FRESH_S)
-                    vel = (int)(w_lift * DS2C_STICK_MAX_PPS);
+                    vel = (int)(-w_lift * DS2C_STICK_MAX_PPS);
                 else
                     vel = 0;
                 ds2c_set_velocity(&g_ds2c, vel);
