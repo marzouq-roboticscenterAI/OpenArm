@@ -84,5 +84,9 @@ void control_manual_start(void);              /* enter manual teach-cal */
 void control_manual_stop(void);               /* exit manual teach-cal  */
 void control_manual_mark(void);               /* record an endpoint for the selected joint */
 void control_set_gain_scale(float s);
+/* Web base/lift setpoints (normalized [-1,1]); gamepad takes precedence when
+ * active, and each decays to 0 if not refreshed within the freshness window. */
+void control_set_web_rover(float lin_norm, float ang_norm);
+void control_set_web_lift(float vel_norm);
 
 #endif /* CONTROL_H */

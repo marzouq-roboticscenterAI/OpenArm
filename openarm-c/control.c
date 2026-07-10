@@ -67,6 +67,11 @@ static int   c_target_set[OA_NBUS][OA_MAX_MOTOR + 1];
 static int   c_sel_bus = -1, c_sel_motor = -1;
 static float c_gain_scale = 1.0f;
 
+/* web base/lift setpoints (normalized [-1,1]) + monotonic last-update stamps */
+#define WEB_FRESH_S 0.35   /* stale web setpoint decays to 0 (fail-safe stop) */
+static float  w_rover_lin, w_rover_ang, w_lift_vel;
+static double w_rover_ts, w_lift_ts;
+
 static double now_s(void)
 { struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts); return ts.tv_sec + ts.tv_nsec*1e-9; }
 static void sleep_ms(int ms)
@@ -536,6 +541,7 @@ static void *control_loop(void *arg)
         float tgt[OA_NBUS][OA_MAX_MOTOR + 1]; int tset[OA_NBUS][OA_MAX_MOTOR + 1];
         int sel_b, sel_m;
         int do_connect, do_disconnect, do_mstart, do_mstop, do_mmark;
+        float w_lin, w_ang, w_lift; double w_rts, w_lts;
         pthread_mutex_lock(&g_lock);
         do_estop = c_estop; c_estop = 0;
         do_clear = c_clear; c_clear = 0;
@@ -551,6 +557,8 @@ static void *control_loop(void *arg)
         memcpy(tset, c_target_set, sizeof tset); memset(c_target_set, 0, sizeof c_target_set);
         sel_b = c_sel_bus; c_sel_bus = -1;
         sel_m = c_sel_motor; c_sel_motor = -1;
+        w_lin = w_rover_lin; w_ang = w_rover_ang; w_rts = w_rover_ts;
+        w_lift = w_lift_vel; w_lts = w_lift_ts;
         pthread_mutex_unlock(&g_lock);
 
         if (do_connect && !S.connected && !S.estopped) {
@@ -646,22 +654,36 @@ static void *control_loop(void *arg)
          * controller is present; otherwise everything is commanded to stop. */
         {
             int rover_go = pad_on && S.connected && !S.estopped;
+            int can_drive = S.connected && !S.estopped;
             if (S.ranger_present) {
-                if (rover_go) {
-                    int spin = pad.btn_l1 || pad.btn_r1;
+                int   spin = rover_go && (pad.btn_l1 || pad.btn_r1);
+                float lin  = rover_go ? (pad.r2 - pad.l2) * 1.0f : 0.0f;  /* R2 fwd, L2 back (m/s) */
+                if (spin || lin != 0.0f) {   /* gamepad active on a rover axis -> precedence */
                     if (spin) {
                         float ang = ((pad.btn_l1 ? 1.0f : 0.0f) - (pad.btn_r1 ? 1.0f : 0.0f)) * 1.2f;
                         ranger_drive(&g_ranger, RANGER_MODE_SPIN, 0.0f, ang);
                     } else {
-                        float lin = (pad.r2 - pad.l2) * 1.0f;   /* R2 fwd, L2 back (m/s) */
                         ranger_drive(&g_ranger, RANGER_MODE_ACKERMANN, lin, 0.0f);
                     }
+                } else if (can_drive && (now_s() - w_rts) < WEB_FRESH_S) {   /* fresh web setpoint */
+                    if (w_ang != 0.0f)
+                        ranger_drive(&g_ranger, RANGER_MODE_SPIN, 0.0f, w_ang * 1.2f);
+                    else
+                        ranger_drive(&g_ranger, RANGER_MODE_ACKERMANN, w_lin * 1.0f, 0.0f);
+                } else if (rover_go) {
+                    ranger_drive(&g_ranger, RANGER_MODE_ACKERMANN, 0.0f, 0.0f);
                 } else {
                     ranger_drive(&g_ranger, g_ranger.cur_mode, 0.0f, 0.0f);
                 }
             }
             if (S.ds2c_present) {
-                int vel = rover_go ? (int)(pad.rstick_y * DS2C_STICK_MAX_PPS) : 0;
+                int vel;
+                if (rover_go && fabsf(pad.rstick_y) > 0.0f)
+                    vel = (int)(pad.rstick_y * DS2C_STICK_MAX_PPS);
+                else if (can_drive && (now_s() - w_lts) < WEB_FRESH_S)
+                    vel = (int)(w_lift * DS2C_STICK_MAX_PPS);
+                else
+                    vel = 0;
                 ds2c_set_velocity(&g_ds2c, vel);
             }
         }
@@ -817,6 +839,19 @@ void control_manual_start(void){ pthread_mutex_lock(&g_lock); c_manual_start = 1
 void control_manual_stop(void){ pthread_mutex_lock(&g_lock); c_manual_stop = 1; pthread_mutex_unlock(&g_lock); }
 void control_manual_mark(void){ pthread_mutex_lock(&g_lock); c_manual_mark = 1; pthread_mutex_unlock(&g_lock); }
 void control_set_gain_scale(float s){ if (s>0 && s<=5) { pthread_mutex_lock(&g_lock); c_gain_scale = s; pthread_mutex_unlock(&g_lock); } }
+static float clamp1(float v){ return v < -1.0f ? -1.0f : (v > 1.0f ? 1.0f : v); }
+void control_set_web_rover(float lin_norm, float ang_norm)
+{
+    pthread_mutex_lock(&g_lock);
+    w_rover_lin = clamp1(lin_norm); w_rover_ang = clamp1(ang_norm); w_rover_ts = now_s();
+    pthread_mutex_unlock(&g_lock);
+}
+void control_set_web_lift(float vel_norm)
+{
+    pthread_mutex_lock(&g_lock);
+    w_lift_vel = clamp1(vel_norm); w_lift_ts = now_s();
+    pthread_mutex_unlock(&g_lock);
+}
 void control_select(int bus, int motor){ pthread_mutex_lock(&g_lock); c_sel_bus = bus; c_sel_motor = motor; pthread_mutex_unlock(&g_lock); }
 void control_jog(int bus, int motor, float delta)
 {

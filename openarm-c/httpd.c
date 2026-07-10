@@ -174,6 +174,12 @@ static void handle(int fd)
     } else if (!strcmp(path, "/api/gain")) {
         control_set_gain_scale(qparam_flt(query,"scale",1.0f));
         respond(fd, 200, "OK", "application/json", ok, strlen(ok));
+    } else if (!strcmp(path, "/api/rover")) {
+        control_set_web_rover(qparam_flt(query,"lin",0), qparam_flt(query,"ang",0));
+        respond(fd, 200, "OK", "application/json", ok, strlen(ok));
+    } else if (!strcmp(path, "/api/lift")) {
+        control_set_web_lift(qparam_flt(query,"vel",0));
+        respond(fd, 200, "OK", "application/json", ok, strlen(ok));
     } else if (!strcmp(path, "/api/log")) {
         int lf = open("openarm.log", O_RDONLY);
         if (lf < 0) { respond(fd, 200, "OK", "text/plain", "(no log yet)", 12); }
