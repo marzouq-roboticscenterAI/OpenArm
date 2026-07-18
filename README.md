@@ -27,7 +27,7 @@ Calibrate from the dashboard: **Auto‑Calibrate** (sweeps to hardstops) or
 Separate calibration script: `./calibrate.sh`.
 
 ## Notes
-- Left arm = `can1`, right arm = `can0` (both 1 Mbit/s).
+- Left arm = `can0`, right arm = `can1` (both 1 Mbit/s).
 - Rover (Ranger Air) = `can2` (500 kbit/s); lift servo (DS2‑C, CANopen) = `can3`
   (1 Mbit/s). Override interface names with `RANGER_CAN` / `DS2C_CAN`. Both are
   ported from [RoverServoLib](https://github.com/jackbiggins-dev/RoverServoLib)

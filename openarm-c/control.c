@@ -28,7 +28,7 @@
 #define RANGER_IFACE_DEFAULT "can2"
 #define DS2C_IFACE_DEFAULT   "can3"
 #define DS2C_NODE_DEFAULT    1
-#define DS2C_STICK_MAX_PPS   12000   /* right-stick full deflection velocity */
+#define DS2C_STICK_MAX_PPS   DS2C_MAX_PPS  /* full stick = driver's 20,000 pps limit */
 
 /* ---- per-joint gains by model tier (id map == calibration) ---- */
 static void joint_gains(int id, float scale, float *kp, float *kd)
@@ -315,6 +315,8 @@ static void manual_mark(void)
         if (hi - lo < 0.05f) {   /* endpoints basically the same -> zero-width slider */
             snprintf(S.status, sizeof S.status, "%s J%d: endpoints too close (%.3f rad) -- jog further, press A again",
                      S.bus[b].iface, id, hi - lo);
+            oa_log("MANUAL-CAL %s J%d: endpoint2 rejected at %.4f (only %.4f rad from endpoint1)",
+                   S.bus[b].iface, id, raw, hi - lo);
             pthread_mutex_unlock(&g_lock);
             return;              /* stay at step 1, wait for a proper 2nd endpoint */
         }
@@ -717,11 +719,23 @@ static void *control_loop(void *arg)
                 }
                 scan_send(g_fd[b], &f);
                 dm_frame_t rf;
-                if (scan_recv(g_fd[b], &rf, 1) == 1 && rf.id == (uint32_t)(id + DM_FB_OFFSET)) {
+                if (scan_recv(g_fd[b], &rf, 1) == 1 &&
+                    rf.id >= DM_FB_OFFSET + OA_MIN_MOTOR &&
+                    rf.id <= DM_FB_OFFSET + OA_MAX_MOTOR) {
+                    /* Replies can arrive one command later on a busy multi-drop
+                     * bus.  Dispatch by the reply's CAN ID instead of requiring
+                     * it to match the motor command sent immediately above;
+                     * otherwise every delayed reply is discarded and encoder
+                     * positions can remain frozen indefinitely. */
+                    int fid = (int)(rf.id - DM_FB_OFFSET);
+                    oa_motor_t *fm = &S.bus[b].m[fid];
+                    dm_limits_t flim; bus_limits(fid, &flim);
                     dm_state_t st;
-                    if (dm_parse_feedback(&rf, &lim, &st)) {
-                        m->pos = st.pos; m->vel = st.vel; m->tau = st.tau; m->err = st.err;
-                        if (drive && m->active && st.err >= 8) { dm_frame_t d; dm_build_disable(&d, id); scan_send(g_fd[b], &d); m->active = 0; }
+                    if (dm_parse_feedback(&rf, &flim, &st)) {
+                        fm->pos = st.pos; fm->vel = st.vel; fm->tau = st.tau; fm->err = st.err;
+                        if (drive && fm->active && st.err >= 8) {
+                            dm_frame_t d; dm_build_disable(&d, fid); scan_send(g_fd[b], &d); fm->active = 0;
+                        }
                     }
                 }
             }

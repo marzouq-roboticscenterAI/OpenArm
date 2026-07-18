@@ -31,9 +31,9 @@ RULES_DST="/etc/udev/rules.d/99-openarm-can.rules"
 RANGER_SERIAL="004100354759530820353131"
 # The PEAK/XCAN adapters share a bogus serial, so match them by USB port.
 declare -A PORT_NAME=(
-  ["3-2.2.3:1.0"]="can3"      # DS-2C servo (XCAN-USB)
-  ["3-2.2.4.3:1.0"]="can0"    # arm A   (swap can0/can1 here if left/right
-  ["3-2.2.4.4:1.0"]="can1"    # arm B    is reversed)
+  ["1-4.3.3:1.0"]="can3"      # DS-2C servo (XCAN-USB)
+  ["1-4.3.4.3:1.0"]="can0"    # arm A
+  ["1-4.3.4.4:1.0"]="can1"    # arm B
 )
 declare -A NAME_BR=( [can0]=1000000 [can1]=1000000 [can2]=500000 [can3]=1000000 )
 

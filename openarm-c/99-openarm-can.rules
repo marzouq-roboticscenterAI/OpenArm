@@ -19,15 +19,15 @@
 #
 # Identities captured 2026-07-08 via rover-servo-lib/list_can_adapters.sh:
 #   candleLight  1d50:606f  serial 004100354759530820353131   -> Ranger -> can2
-#   XCAN-USB     0c72:000c  USB port 3-2.2.3                   -> DS-2C  -> can3
-#   PCAN-USB FD  0c72:0012  USB port 3-2.2.4.3                 -> arm    -> can0
-#   PCAN-USB FD  0c72:0012  USB port 3-2.2.4.4                 -> arm    -> can1
+#   XCAN-USB     0c72:000c  USB port 1-4.3.3                   -> DS-2C  -> can3
+#   PCAN-USB FD  0c72:0012  USB port 1-4.3.4.3                 -> arm A -> can0
+#   PCAN-USB FD  0c72:0012  USB port 1-4.3.4.4                 -> arm B -> can1
 
 # Ranger rover — matched by its unique serial (survives moving to another port).
 SUBSYSTEM=="net", ACTION=="add", ATTRS{serial}=="004100354759530820353131", NAME="can2"
 
 # The PEAK/XCAN adapters all report a bogus shared serial, so match by the
 # physical USB port instead (stable as long as each stays in its socket).
-SUBSYSTEM=="net", ACTION=="add", KERNELS=="3-2.2.3:1.0",   NAME="can3"   # DS-2C servo (XCAN-USB)
-SUBSYSTEM=="net", ACTION=="add", KERNELS=="3-2.2.4.3:1.0", NAME="can0"   # arm  (swap with can1 line
-SUBSYSTEM=="net", ACTION=="add", KERNELS=="3-2.2.4.4:1.0", NAME="can1"   #  if left/right is reversed)
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="1-4.3.3:1.0",   NAME="can3"   # DS-2C servo (XCAN-USB)
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="1-4.3.4.3:1.0", NAME="can0"   # arm A
+SUBSYSTEM=="net", ACTION=="add", KERNELS=="1-4.3.4.4:1.0", NAME="can1"   # arm B

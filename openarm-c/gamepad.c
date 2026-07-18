@@ -28,6 +28,7 @@ void gamepad_init(gamepad_t *g)
 {
     memset(g, 0, sizeof *g);
     g->fd = -1;
+    g->_btn_a_code = BTN_SOUTH;
     g->_ax_min = -32768; g->_ax_max = 32767;
     g->_rx_min = -32768; g->_rx_max = 32767;
     g->_ry_min = -32768; g->_ry_max = 32767;
@@ -53,6 +54,11 @@ int gamepad_detect(gamepad_t *g)
         snprintf(g->devnode, sizeof g->devnode, "%s", path);
         if (ioctl(fd, EVIOCGNAME(sizeof g->name), g->name) < 0)
             snprintf(g->name, sizeof g->name, "controller");
+        /* This kernel reports the controller's printed A as BTN_SOUTH. */
+        g->_btn_a_code = BTN_SOUTH;
+        struct input_id iid;
+        g->_pro_controller =
+            ioctl(fd, EVIOCGID, &iid) == 0 && iid.vendor == 0x057e && iid.product == 0x2009;
         /* Calibrate left-stick X range. */
         struct input_absinfo ai;
         if (ioctl(fd, EVIOCGABS(ABS_X), &ai) == 0 && ai.maximum > ai.minimum) {
@@ -129,12 +135,16 @@ int gamepad_poll(gamepad_t *g)
                 else if (ev.code == ABS_Z)     g->l2 = norm01(ev.value, g->_z_min, g->_z_max);
                 else if (ev.code == ABS_RZ)    g->r2 = norm01(ev.value, g->_rz_min, g->_rz_max);
             } else if (ev.type == EV_KEY) {
-                if (ev.code == BTN_SOUTH) g->btn_a = ev.value ? 1 : 0;
+                if (ev.code == g->_btn_a_code) g->btn_a = ev.value ? 1 : 0;
                 else if (ev.code == BTN_START) g->btn_start = ev.value ? 1 : 0;
                 else if (ev.code == BTN_THUMBL) g->btn_l3 = ev.value ? 1 : 0;
                 else if (ev.code == BTN_THUMBR) g->btn_r3 = ev.value ? 1 : 0;
-                else if (ev.code == BTN_TL) g->btn_l1 = ev.value ? 1 : 0;
-                else if (ev.code == BTN_TR) g->btn_r1 = ev.value ? 1 : 0;
+                else if (g->_pro_controller && ev.code == BTN_WEST) g->btn_l1 = ev.value ? 1 : 0;
+                else if (g->_pro_controller && ev.code == BTN_Z)    g->btn_r1 = ev.value ? 1 : 0;
+                else if (g->_pro_controller && ev.code == BTN_TL)   g->l2 = ev.value ? 1.0f : 0.0f;
+                else if (g->_pro_controller && ev.code == BTN_TR)   g->r2 = ev.value ? 1.0f : 0.0f;
+                else if (!g->_pro_controller && ev.code == BTN_TL)  g->btn_l1 = ev.value ? 1 : 0;
+                else if (!g->_pro_controller && ev.code == BTN_TR)  g->btn_r1 = ev.value ? 1 : 0;
                 else if (ev.code == BTN_TL2) g->l2 = ev.value ? 1.0f : 0.0f;   /* digital trigger fallback */
                 else if (ev.code == BTN_TR2) g->r2 = ev.value ? 1.0f : 0.0f;
             }

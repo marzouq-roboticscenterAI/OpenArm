@@ -15,7 +15,7 @@ typedef struct {
     float stick_x;          /* left stick X, -1..+1 */
     float rstick_x, rstick_y; /* right stick, -1..+1 (deadzoned) */
     int   dpad_x, dpad_y;   /* -1/0/+1 */
-    int   btn_a;            /* south button (A) */
+    int   btn_a;            /* physical A / primary action button */
     int   btn_start;        /* start button (e-stop) */
     int   btn_l3, btn_r3;   /* left / right stick click (thumb) */
     int   btn_l1, btn_r1;   /* left / right bumper */
@@ -27,6 +27,8 @@ typedef struct {
 
     /* internal */
     int   _hat_x, _hat_y;
+    int   _btn_a_code;       /* event code for the controller's reported A button */
+    int   _pro_controller;   /* Nintendo Pro Controller's nonstandard shoulder map */
     int   _prev_dx, _prev_dy, _prev_a, _prev_l3, _prev_r3;
     int   _ax_min, _ax_max;   /* left-stick X calibration */
     int   _rx_min, _rx_max, _ry_min, _ry_max;   /* right-stick calibration */

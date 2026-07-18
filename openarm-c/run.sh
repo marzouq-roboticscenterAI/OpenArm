@@ -4,7 +4,7 @@
 # (web dashboard + auto Scheme-1 gamepad control).
 #
 # Buses:
-#   can0 / can1  arms      @ 1 Mbit/s  (can1=LEFT, can0=RIGHT)
+#   can0 / can1  arms      @ 1 Mbit/s  (interface names are independent of UI labels)
 #   can2         Ranger    @ 500 kbit/s (AgileX Ranger Air rover)
 #   can3         DS2-C     @ 1 Mbit/s  (lift servo, CANopen)
 # Override interface names with RANGER_CAN / DS2C_CAN and bitrates with
